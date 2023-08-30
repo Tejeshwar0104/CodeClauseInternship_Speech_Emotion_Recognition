@@ -1,0 +1,119 @@
+import numpy as np
+import pandas as pd
+import os
+from sklearn.model_selection import train_test_split
+from keras.models import Sequential
+from keras.layers import Dense, LSTM, Dropout
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
+import librosa
+import librosa.display
+from IPython.display import Audio
+import IPython.display as ipd
+import warnings
+warnings.filterwarnings("ignore", category = UserWarning)
+
+base_path = "C:/Users/WELCOME/OneDrive/Documents/INTERNSHIP/TESS Toronto emotional speech set data"
+
+paths = []
+labels = []
+for dirname,_,filenames in os.walk(base_path):
+    for filename in filenames:
+        paths.append(os.path.join(dirname,filename))
+        label = filename.split('_')[-1]
+        label = label.split('-')[0]
+        labels.append(label.lower())
+    if len(paths) == 2800:
+        break
+print("Dataset is successfully uploaded")
+
+paths[:10]
+
+len(paths)
+
+labels[:10]
+
+df = pd.DataFrame()
+df['speech'] = paths
+df['label'] = labels
+df.head()
+
+df['label'].value_counts()
+
+plt.hist(df['label'],color = 'orange')
+
+data,sampling_rate = librosa.load("C:/Users/WELCOME/OneDrive/Documents/INTERNSHIP/TESS Toronto emotional speech set data/OAF_angry/OAF_bar_angry.wav")
+ipd.Audio("C:/Users/WELCOME/OneDrive/Documents/INTERNSHIP/TESS Toronto emotional speech set data/OAF_angry/OAF_bar_angry.wav")
+
+plt.figure(figsize = (20,15))
+librosa.display.waveshow(data, sr = sampling_rate)
+
+labels = ['Fear','Angry','Disgust','Neutral','sad','Ps','Happy']
+plt.pie(df['label'].value_counts(),labels = labels, autopct = '%.0f%%', radius = 2, textprops = {'fontsize' :10})
+plt.show()
+
+def feature_extract(filename):
+    y,sr = librosa.load(filename,duration = 3, offset = 0.5)
+    return np.mean(librosa.feature.mfcc(y=y,sr=sr,n_mfcc = 40).T,axis = 0)
+
+feature_extract(df['speech'][0])
+
+MFCC = df['speech'].apply(lambda x:feature_extract(x))
+MFCC
+
+X = [x for x in MFCC]
+X = np.array(X)
+X.shape
+
+X = np.expand_dims(X,-1)
+X.shape
+
+encoder = OneHotEncoder()
+y = encoder.fit_transform(df[['label']])
+Y = y.toarray()
+
+print(Y)
+print(Y.shape)
+
+X_train,X_test,Y_train,Y_test = train_test_split(X,Y,test_size = 0.3, random_state = 42)
+
+model = Sequential([
+    LSTM(256,return_sequences = False, input_shape = (40,1)),
+    Dropout(0.2),
+    Dense(128,activation = 'relu'),
+    Dropout(0.2),
+    Dense(64,activation = 'relu'),
+    Dropout(0.2),
+    Dense(7,activation = 'softmax')])
+
+model.compile(loss = 'categorical_crossentropy',optimizer = 'adam', metrics = ['accuracy'])
+
+model.summary()
+
+history = model.fit(X_train,Y_train,validation_split = 0.3, epochs = 55, batch_size = 64)
+
+epochs = list(range(55))
+accuracy = history.history['accuracy']
+val_accuracy = history.history['val_accuracy']
+
+plt.plot(epochs,accuracy,label = 'accuracy')
+plt.plot(epochs,val_accuracy,label = 'validation accuracy')
+plt.legend()
+plt.show()
+
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+
+plt.plot(epochs,loss,label = 'loss')
+plt.plot(epochs,val_loss,label = 'validation loss')
+plt.legend()
+plt.show()
+
+model.evaluate(X_train,Y_train)
+
+pred = model.predict(X_test)
+pred
+
+acc = model.evaluate(X_test,Y_test)
+acc
